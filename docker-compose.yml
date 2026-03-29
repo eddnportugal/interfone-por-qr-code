@@ -1,0 +1,60 @@
+services:
+  appinterfone:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: appinterfone
+    restart: unless-stopped
+    ports:
+      - "3002:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - JWT_SECRET=${JWT_SECRET}
+      # AWS SES (Email)
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_SES_REGION=${AWS_SES_REGION:-sa-east-1}
+      - SES_FROM_EMAIL=${SES_FROM_EMAIL:-naoresponda@appinterfone.com.br}
+      - SES_FROM_NAME=${SES_FROM_NAME:-App Interfone}
+      - APP_URL=${APP_URL:-https://appinterfone.com.br}
+    volumes:
+      # Persist SQLite database
+      - appinterfone_data:/app/data
+    networks:
+      - coolify
+    labels:
+      # Traefik labels for Coolify
+      - "traefik.enable=true"
+      - "traefik.http.routers.appinterfone.rule=Host(`appinterfone.com.br`) || Host(`www.appinterfone.com.br`)"
+      - "traefik.http.routers.appinterfone.entrypoints=https"
+      - "traefik.http.routers.appinterfone.tls=true"
+      - "traefik.http.routers.appinterfone.tls.certresolver=letsencrypt"
+      - "traefik.http.services.appinterfone.loadbalancer.server.port=3001"
+      # HTTP → HTTPS redirect
+      - "traefik.http.routers.appinterfone-http.rule=Host(`appinterfone.com.br`) || Host(`www.appinterfone.com.br`)"
+      - "traefik.http.routers.appinterfone-http.entrypoints=http"
+      - "traefik.http.routers.appinterfone-http.middlewares=redirect-to-https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      # www → non-www redirect
+      - "traefik.http.routers.appinterfone-www.rule=Host(`www.appinterfone.com.br`)"
+      - "traefik.http.routers.appinterfone-www.entrypoints=https"
+      - "traefik.http.routers.appinterfone-www.tls=true"
+      - "traefik.http.routers.appinterfone-www.middlewares=appinterfone-redirect-www"
+      - "traefik.http.middlewares.appinterfone-redirect-www.redirectregex.regex=^https://www\\.appinterfone\\.com\\.br/(.*)"
+      - "traefik.http.middlewares.appinterfone-redirect-www.redirectregex.replacement=https://appinterfone.com.br/$${1}"
+      - "traefik.http.middlewares.appinterfone-redirect-www.redirectregex.permanent=true"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+networks:
+  coolify:
+    external: true
+
+volumes:
+  appinterfone_data:
+    driver: local

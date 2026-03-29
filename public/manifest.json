@@ -1,0 +1,20 @@
+{
+  "name": "App Interfone — Interfone Digital por QR Code",
+  "short_name": "App Interfone",
+  "description": "Interfone digital por QR Code para condomínios. Visitantes tocam o interfone escaneando o QR Code na portaria.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#003580",
+  "theme_color": "#003580",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity", "utilities"]
+}
