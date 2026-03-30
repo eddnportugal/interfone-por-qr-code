@@ -856,6 +856,30 @@ export async function emailSenhaAlterada(data: {
 }
 
 // ──────────────────────────────────────────
+// 13. AUTH — Código de recuperação de senha
+// ──────────────────────────────────────────
+
+export async function emailCodigoRecuperacao(data: {
+  email: string;
+  nome: string;
+  codigo: string;
+}): Promise<void> {
+  const body = `
+    <p style="color:#475569;font-size:15px;">Olá <strong>${data.nome}</strong>,</p>
+    <p style="color:#475569;font-size:15px;">Você solicitou a recuperação de senha no <strong>App Interfone</strong>.</p>
+    <div style="text-align:center;margin:24px 0;">
+      <div style="display:inline-block;background:#f8fafc;border:2px solid #3b82f6;border-radius:12px;padding:16px 32px;">
+        <p style="color:#64748b;font-size:13px;margin:0 0 4px 0;">Seu código de verificação:</p>
+        <p style="color:#1e293b;font-size:32px;font-weight:800;margin:0;letter-spacing:8px;">${data.codigo}</p>
+      </div>
+    </div>
+    ${alertBox("Este código expira em 15 minutos. Se você não solicitou esta recuperação, ignore este e-mail.", "warning")}
+  `;
+
+  await sendEmail(data.email, `🔑 Código de recuperação — App Interfone`, emailLayout("Recuperação de Senha", body));
+}
+
+// ──────────────────────────────────────────
 // Export utility for direct use
 // ──────────────────────────────────────────
 export { sendEmail, emailLayout, getMoradorEmail, getSindicoEmail, getCondominioName };

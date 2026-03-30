@@ -15,9 +15,9 @@ import {
   Lock,
   KeyRound,
   MessageCircle,
-  Shield,
 } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
+import { apiFetch } from "@/lib/api";
 
 type Step = "request" | "verify" | "reset" | "success";
 type ResetType = "email" | "phone";
@@ -36,9 +36,8 @@ export default function ForgotPassword() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-  const [devCode, setDevCode] = useState("");
 
-  const whatsappNumber = "5511999999999";
+  const whatsappNumber = "5511930701054";
   const whatsappMsg = encodeURIComponent("Olá! Preciso de ajuda para recuperar minha senha no App Interfone.");
 
   /* ── Helpers ── */
@@ -50,21 +49,44 @@ export default function ForgotPassword() {
     return `(${n.slice(0, 2)}) ${n.slice(2, 7)}-${n.slice(7, 11)}`;
   };
 
-  /* ── Simulated backend calls (mockup) ── */
-  const simulateRequest = async () => {
-    await new Promise((r) => setTimeout(r, 1200));
-    const generated = String(Math.floor(100000 + Math.random() * 900000));
-    setDevCode(generated);
-    return generated;
+  /* ── API calls ── */
+  const requestCode = async () => {
+    const clean = type === "phone" ? identifier.replace(/\D/g, "") : identifier.trim();
+    const res = await apiFetch("/api/auth/password-reset/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: clean }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || "Erro ao solicitar recuperação.");
+    }
   };
 
-  const simulateVerify = async (inputCode: string) => {
-    await new Promise((r) => setTimeout(r, 800));
-    if (inputCode !== devCode) throw new Error("Código inválido ou expirado.");
+  const verifyCode = async (inputCode: string) => {
+    const clean = type === "phone" ? identifier.replace(/\D/g, "") : identifier.trim();
+    const res = await apiFetch("/api/auth/password-reset/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: clean, code: inputCode }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || "Código inválido.");
+    }
   };
 
-  const simulateReset = async () => {
-    await new Promise((r) => setTimeout(r, 1000));
+  const resetPassword = async () => {
+    const clean = type === "phone" ? identifier.replace(/\D/g, "") : identifier.trim();
+    const res = await apiFetch("/api/auth/password-reset/reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: clean, code, newPassword }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || "Erro ao redefinir senha.");
+    }
   };
 
   /* ── Handlers ── */
@@ -78,10 +100,10 @@ export default function ForgotPassword() {
 
     setIsLoading(true);
     try {
-      await simulateRequest();
+      await requestCode();
       setStep("verify");
-    } catch {
-      setError("Erro ao solicitar recuperação.");
+    } catch (err: any) {
+      setError(err.message || "Erro ao solicitar recuperação.");
     } finally {
       setIsLoading(false);
     }
@@ -94,7 +116,7 @@ export default function ForgotPassword() {
 
     setIsLoading(true);
     try {
-      await simulateVerify(code);
+      await verifyCode(code);
       setStep("reset");
     } catch (err: any) {
       setError(err.message || "Código inválido.");
@@ -111,10 +133,10 @@ export default function ForgotPassword() {
 
     setIsLoading(true);
     try {
-      await simulateReset();
+      await resetPassword();
       setStep("success");
-    } catch {
-      setError("Erro ao redefinir senha.");
+    } catch (err: any) {
+      setError(err.message || "Erro ao redefinir senha.");
     } finally {
       setIsLoading(false);
     }
@@ -315,29 +337,6 @@ export default function ForgotPassword() {
         {/* ───── STEP 2: Verify ───── */}
         {step === "verify" && (
           <form onSubmit={handleVerify}>
-            {/* Dev hint */}
-            {devCode && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  padding: "12px 14px",
-                  background: "rgba(45,51,84,0.08)",
-                  border: "1px solid rgba(45,51,84,0.2)",
-                  borderRadius: "12px",
-                  color: "#2d3354",
-                  fontSize: "13px",
-                  marginBottom: "16px",
-                }}
-              >
-                <Shield style={{ width: "16px", height: "16px", flexShrink: 0 }} />
-                <span>
-                  <strong>Modo Demo</strong> — Código: <strong>{devCode}</strong>
-                </span>
-              </div>
-            )}
-
             <div style={{ textAlign: "center" }}>
               <Label htmlFor="fp-code" className="text-sm font-semibold text-gray-700">Código de verificação</Label>
               <Input

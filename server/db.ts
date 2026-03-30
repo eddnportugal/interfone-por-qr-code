@@ -921,6 +921,19 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_whatsapp_log_condominio ON whatsapp_log(condominio_id, created_at);
 `);
 
+// ─── Password reset codes ───
+db.exec(`
+  CREATE TABLE IF NOT EXISTS password_reset_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    code TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_reset_codes_email ON password_reset_codes(email, used);
+`);
+
 export default db;
 
 // Helper types

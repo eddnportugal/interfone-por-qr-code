@@ -1,9 +1,10 @@
 ﻿import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import db, { type DbUser, type DbCondominio } from "./db.js";
 import { authenticate } from "./middleware.js";
-import { emailBoasVindasMorador, emailBoasVindasSindico, emailSenhaAlterada } from "./emailService.js";
+import { emailBoasVindasMorador, emailBoasVindasSindico, emailSenhaAlterada, emailCodigoRecuperacao } from "./emailService.js";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-in-production-32chars!!";
@@ -726,6 +727,118 @@ router.delete("/account", authenticate, (req, res) => {
   } catch (err: any) {
     console.error("Erro em auth :", err);
     res.status(500).json({ error: "Erro interno do servidor" });
+  }
+});
+
+// ─── PASSWORD RESET — Request code ──────────────────────
+router.post("/password-reset/request", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      res.status(400).json({ error: "Informe um e-mail válido." });
+      return;
+    }
+
+    const user = db.prepare("SELECT id, name, email FROM users WHERE email = ?").get(email) as { id: number; name: string; email: string } | undefined;
+    // Always return success to prevent email enumeration
+    if (!user) {
+      res.json({ message: "Se o e-mail estiver cadastrado, você receberá um código de recuperação." });
+      return;
+    }
+
+    // Invalidate previous codes
+    db.prepare("UPDATE password_reset_codes SET used = 1 WHERE email = ? AND used = 0").run(email);
+
+    // Generate 6-digit code
+    const code = String(crypto.randomInt(100000, 999999));
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 min
+
+    db.prepare("INSERT INTO password_reset_codes (email, code, expires_at) VALUES (?, ?, ?)").run(email, code, expiresAt);
+
+    // Send email
+    emailCodigoRecuperacao({ email: user.email, nome: user.name, codigo: code })
+      .catch((err) => console.error("[EMAIL] Erro código recuperação:", err));
+
+    res.json({ message: "Se o e-mail estiver cadastrado, você receberá um código de recuperação." });
+  } catch (err: any) {
+    console.error("Erro password-reset/request:", err);
+    res.status(500).json({ error: "Erro interno do servidor." });
+  }
+});
+
+// ─── PASSWORD RESET — Verify code ───────────────────────
+router.post("/password-reset/verify", (req, res) => {
+  try {
+    const { email, code } = req.body;
+    if (!email || !code) {
+      res.status(400).json({ error: "E-mail e código são obrigatórios." });
+      return;
+    }
+
+    const record = db.prepare(
+      "SELECT id, expires_at FROM password_reset_codes WHERE email = ? AND code = ? AND used = 0 ORDER BY id DESC LIMIT 1"
+    ).get(email, code) as { id: number; expires_at: string } | undefined;
+
+    if (!record) {
+      res.status(400).json({ error: "Código inválido ou já utilizado." });
+      return;
+    }
+
+    if (new Date(record.expires_at) < new Date()) {
+      res.status(400).json({ error: "Código expirado. Solicite um novo." });
+      return;
+    }
+
+    res.json({ valid: true });
+  } catch (err: any) {
+    console.error("Erro password-reset/verify:", err);
+    res.status(500).json({ error: "Erro interno do servidor." });
+  }
+});
+
+// ─── PASSWORD RESET — Set new password ──────────────────
+router.post("/password-reset/reset", async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    if (!email || !code || !newPassword) {
+      res.status(400).json({ error: "Dados incompletos." });
+      return;
+    }
+
+    if (!/^\d{6}$/.test(newPassword)) {
+      res.status(400).json({ error: "A senha deve ter exatamente 6 dígitos numéricos." });
+      return;
+    }
+
+    const record = db.prepare(
+      "SELECT id, expires_at FROM password_reset_codes WHERE email = ? AND code = ? AND used = 0 ORDER BY id DESC LIMIT 1"
+    ).get(email, code) as { id: number; expires_at: string } | undefined;
+
+    if (!record || new Date(record.expires_at) < new Date()) {
+      res.status(400).json({ error: "Código inválido ou expirado." });
+      return;
+    }
+
+    const user = db.prepare("SELECT id, name FROM users WHERE email = ?").get(email) as { id: number; name: string } | undefined;
+    if (!user) {
+      res.status(400).json({ error: "Usuário não encontrado." });
+      return;
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    db.prepare("UPDATE users SET password = ? WHERE id = ?").run(hash, user.id);
+
+    // Mark code as used
+    db.prepare("UPDATE password_reset_codes SET used = 1 WHERE id = ?").run(record.id);
+
+    // Notify user
+    emailSenhaAlterada({ email, nome: user.name })
+      .catch((err) => console.error("[EMAIL] Erro senha alterada:", err));
+
+    res.json({ message: "Senha redefinida com sucesso." });
+  } catch (err: any) {
+    console.error("Erro password-reset/reset:", err);
+    res.status(500).json({ error: "Erro interno do servidor." });
   }
 });
 

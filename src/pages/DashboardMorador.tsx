@@ -48,16 +48,23 @@ export default function DashboardMorador() {
 
   const [config, setConfig] = useState<Record<string, string>>({});
   const [configLoaded, setConfigLoaded] = useState(false);
+  const [configError, setConfigError] = useState(false);
 
   // Fetch condominio feature config
   useEffect(() => {
     apiFetch("/api/condominio-config")
-      .then((res) => res.ok ? res.json() : {})
+      .then((res) => {
+        if (!res.ok) throw new Error("Config load failed");
+        return res.json();
+      })
       .then((data) => {
         setConfig(data);
         setConfigLoaded(true);
       })
-      .catch(() => setConfigLoaded(true));
+      .catch(() => {
+        setConfigLoaded(true);
+        setConfigError(true);
+      });
   }, []);
 
   const isFeatureEnabled = (key: string): boolean => {
@@ -137,6 +144,12 @@ export default function DashboardMorador() {
             <div className="flex items-center justify-center" style={{ width: 64, height: 64, borderRadius: 20, background: p.btnBg, border: p.iconBoxBorder }}>
               <Loader2 className="animate-spin" style={{ width: 28, height: 28, color: p.text }} />
             </div>
+          </div>
+        ) : configError ? (
+          <div style={{ textAlign: "center", paddingTop: "2rem", padding: "16px", background: "rgba(220,38,38,0.08)", borderRadius: 12, border: "1px solid rgba(220,38,38,0.2)" }}>
+            <p style={{ fontSize: 14, color: "#dc2626", fontWeight: 600 }}>
+              Erro ao carregar configurações. Verifique sua conexão e tente novamente.
+            </p>
           </div>
         ) : enabledFeatures.length === 0 ? (
           <div style={{ textAlign: "center", paddingTop: "4rem" }}>

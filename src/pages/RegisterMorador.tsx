@@ -17,6 +17,8 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
+import { apiFetch } from "@/lib/api";
+
 interface LocationState {
   condominioId: number;
   condominioName: string;
@@ -61,7 +63,7 @@ export default function RegisterMorador() {
   useEffect(() => {
     async function loadConfig() {
       try {
-        const res = await fetch(`/api/condominio-config/public?condominio_id=${condominioId}`);
+        const res = await apiFetch(`/api/condominio-config/public?condominio_id=${condominioId}`);
         if (res.ok) {
           const data = await res.json();
           if (data.notify_whatsapp_enabled === "true" && data.notify_whatsapp_phone) {
