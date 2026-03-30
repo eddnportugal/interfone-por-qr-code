@@ -1,7 +1,8 @@
 import { useAuth, getRoleLabel } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { apiFetch } from "@/lib/api";
 import FuncoesIndex from "@/components/FuncoesIndex";
 import ThemePicker from "@/components/ThemePicker";
 import {
@@ -16,27 +17,44 @@ import {
   UserPlus,
   UserCircle,
   Phone,
+  Loader2,
 } from "lucide-react";
 
-/* ═══ Mock data for Síndico ═══ */
-const mockStats = {
-  blocos: 4,
-  funcionarios: 6,
-  moradores: 120,
-};
-
-const mockBlocos = [
-  { nome: "Bloco A", moradores: 32, andares: 8 },
-  { nome: "Bloco B", moradores: 28, andares: 8 },
-  { nome: "Bloco C", moradores: 35, andares: 10 },
-  { nome: "Bloco D", moradores: 25, andares: 6 },
-];
+interface BlocoRow { id: number; name: string; condominio_id: number }
+interface MoradorRow { id: number; block: string }
+interface FuncRow { id: number }
 
 export default function DashboardSindico() {
   const { user, logout } = useAuth();
   const { toggleTheme, p } = useTheme();
   const navigate = useNavigate();
   const [activeModule, setActiveModule] = useState(0);
+  const [stats, setStats] = useState({ blocos: 0, funcionarios: 0, moradores: 0 });
+  const [blocosList, setBlocosList] = useState<{ nome: string; moradores: number }[]>([]);
+  const [dataLoaded, setDataLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      apiFetch("/api/blocos").then(r => r.ok ? r.json() : []),
+      apiFetch("/api/moradores").then(r => r.ok ? r.json() : []),
+      apiFetch("/api/funcionarios").then(r => r.ok ? r.json() : []),
+    ]).then(([blocos, moradores, funcionarios]: [BlocoRow[], MoradorRow[], FuncRow[]]) => {
+      if (cancelled) return;
+      // Count moradores per block
+      const countByBlock: Record<string, number> = {};
+      for (const m of moradores) {
+        const b = m.block || "Sem bloco";
+        countByBlock[b] = (countByBlock[b] || 0) + 1;
+      }
+      setBlocosList(
+        blocos.map(b => ({ nome: b.name, moradores: countByBlock[b.name] || 0 }))
+      );
+      setStats({ blocos: blocos.length, funcionarios: funcionarios.length, moradores: moradores.length });
+      setDataLoaded(true);
+    }).catch(() => setDataLoaded(true));
+    return () => { cancelled = true; };
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -102,9 +120,9 @@ export default function DashboardSindico() {
         {/* ═══════════ ROW 1: Stat Cards ═══════════ */}
         <div className="animate-fade-in grid grid-cols-2 sm:grid-cols-4" style={{ animationDelay: "0.1s", gap: 12 }}>
           {[
-            { label: "Blocos", value: mockStats.blocos, icon: Layers, route: "/cadastros/blocos" },
-            { label: "Funcionários", value: mockStats.funcionarios, icon: Wrench, route: "/cadastros/funcionarios" },
-            { label: "Moradores", value: mockStats.moradores, icon: Users2, route: "/cadastros/moradores" },
+            { label: "Blocos", value: stats.blocos, icon: Layers, route: "/cadastros/blocos" },
+            { label: "Funcionários", value: stats.funcionarios, icon: Wrench, route: "/cadastros/funcionarios" },
+            { label: "Moradores", value: stats.moradores, icon: Users2, route: "/cadastros/moradores" },
           ].map((s) => (
             <button
               key={s.label}
@@ -139,9 +157,9 @@ export default function DashboardSindico() {
             <div style={{ borderRadius: 20, background: p.surfaceBg, border: p.featureBorder, overflow: "hidden" }}>
               {(() => {
                 const barData = [
-                  { label: "Blocos", value: mockStats.blocos, icon: Layers, color: "#60a5fa" },
-                  { label: "Funcionários", value: mockStats.funcionarios, icon: Wrench, color: "#34d399" },
-                  { label: "Moradores", value: mockStats.moradores, icon: Users2, color: "#a78bfa" },
+                  { label: "Blocos", value: stats.blocos, icon: Layers, color: "#60a5fa" },
+                  { label: "Funcionários", value: stats.funcionarios, icon: Wrench, color: "#34d399" },
+                  { label: "Moradores", value: stats.moradores, icon: Users2, color: "#a78bfa" },
                 ];
                 const maxVal = Math.max(...barData.map(b => b.value), 1);
                 return barData.map((bar, index) => {
@@ -181,10 +199,18 @@ export default function DashboardSindico() {
           <div>
             <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
               <p style={{ fontSize: 14, fontWeight: 700, color: p.accentBright, textTransform: "uppercase", letterSpacing: "0.08em" }}>Blocos</p>
-              <span style={{ fontSize: 13, color: p.textDim }}>{mockBlocos.length} total</span>
+              <span style={{ fontSize: 13, color: p.textDim }}>{blocosList.length} total</span>
             </div>
             <div style={{ borderRadius: 20, background: p.surfaceBg, border: p.featureBorder, overflow: "hidden" }}>
-              {mockBlocos.map((bloco, index) => (
+              {!dataLoaded ? (
+                <div style={{ padding: "24px", display: "flex", justifyContent: "center" }}>
+                  <Loader2 className="animate-spin" style={{ width: 22, height: 22, color: p.textDim }} />
+                </div>
+              ) : blocosList.length === 0 ? (
+                <div style={{ padding: "20px 18px", textAlign: "center" }}>
+                  <p style={{ fontSize: 13, color: p.textDim }}>Nenhum bloco cadastrado</p>
+                </div>
+              ) : blocosList.map((bloco, index) => (
                 <div
                   key={bloco.nome}
                   className="flex items-center"
@@ -192,7 +218,7 @@ export default function DashboardSindico() {
                     padding: "14px 18px",
                     gap: 12,
                     cursor: "pointer",
-                    borderBottom: index < mockBlocos.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
+                    borderBottom: index < blocosList.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
                     transition: "background 0.15s",
                     background: index === activeModule ? "rgba(255,255,255,0.08)" : "transparent",
                   }}
@@ -205,7 +231,7 @@ export default function DashboardSindico() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p style={{ fontSize: 14, fontWeight: 600, color: p.text }}>{bloco.nome}</p>
-                    <p style={{ fontSize: 11, color: p.textDim }}>{bloco.andares} andares · {bloco.moradores} moradores</p>
+                    <p style={{ fontSize: 11, color: p.textDim }}>{bloco.moradores} moradores</p>
                   </div>
                   <span style={{ fontSize: 18, fontWeight: 800, color: "#34d399" }}>{bloco.moradores}</span>
                 </div>
