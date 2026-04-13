@@ -58,7 +58,7 @@ function ensureDemoData() {
   const existing = db.prepare("SELECT id FROM condominios WHERE cnpj = ?").get(DEMO_CONDO_CNPJ) as { id: number } | undefined;
   if (existing) return existing.id;
 
-  const hashedPw = bcrypt.hashSync("demo123", 10);
+  const hashedPw = bcrypt.hashSync("123456", 10);
 
   // Create demo condomínio
   const condoResult = db.prepare(
@@ -162,6 +162,25 @@ function ensureDemoData() {
 
 // Ensure demo data exists on server start
 try { ensureDemoData(); } catch (e) { console.warn("[DEMO] Demo data may already exist:", e); }
+
+// Fix demo passwords: update from "demo123" to numeric "123456"
+try {
+  const demoEmails = [
+    "demo.sindico@appinterfone.com",
+    "demo.porteiro@appinterfone.com",
+    "demo.morador@appinterfone.com",
+    "demo.morador2@appinterfone.com",
+    "demo.morador3@appinterfone.com",
+  ];
+  const numericHash = bcrypt.hashSync("123456", 10);
+  for (const em of demoEmails) {
+    const u = db.prepare("SELECT id, password FROM users WHERE email = ?").get(em) as { id: number; password: string } | undefined;
+    if (u && !bcrypt.compareSync("123456", u.password)) {
+      db.prepare("UPDATE users SET password = ? WHERE id = ?").run(numericHash, u.id);
+      console.log(`[DEMO] Password updated for ${em}`);
+    }
+  }
+} catch (e) { console.warn("[DEMO] Password migration error:", e); }
 
 const DEMO_EMAILS: Record<string, string> = {
   sindico: "demo.sindico@appinterfone.com",
